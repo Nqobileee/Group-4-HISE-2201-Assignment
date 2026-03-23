@@ -21,7 +21,7 @@ public class MainActivity extends AppCompatActivity {
                 .findFragmentById(R.id.nav_host_fragment);
         if (navHostFragment != null) {
             NavController navController = navHostFragment.getNavController();
-            NavigationUI.setupWithNavController(binding.nav_view, navController);
+            NavigationUI.setupWithNavController(binding.navView, navController);
         }
     }
 }

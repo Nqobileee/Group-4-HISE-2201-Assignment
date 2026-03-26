@@ -5,9 +5,11 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.preference.PreferenceManager;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +24,10 @@ import androidx.fragment.app.Fragment;
 import com.example.geotracker.data.AppDatabase;
 import com.example.geotracker.data.LocationEntity;
 import com.example.geotracker.databinding.FragmentMapBinding;
+import com.example.geotracker.geofence.GeofenceHelper;
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofencingClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
@@ -44,12 +49,16 @@ import java.util.concurrent.Executors;
 
 public class MapFragment extends Fragment {
 
+    private static final String TAG = "MapFragment";
     private FragmentMapBinding binding;
     private IMapController mapController;
     private MyLocationNewOverlay locationOverlay;
     private FusedLocationProviderClient fusedLocationClient;
+    private GeofencingClient geofencingClient;
+    private GeofenceHelper geofenceHelper;
     private LocationCallback locationCallback;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private static final float GEOFENCE_RADIUS = 200; // meters
 
     @Nullable
     @Override
@@ -78,6 +87,8 @@ public class MapFragment extends Fragment {
         binding.mapView.getOverlays().add(locationOverlay);
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
+        geofencingClient = LocationServices.getGeofencingClient(requireActivity());
+        geofenceHelper = new GeofenceHelper(requireContext());
 
         // Long Press to Save Location
         MapEventsReceiver mReceive = new MapEventsReceiver() {
@@ -105,9 +116,7 @@ public class MapFragment extends Fragment {
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(@NonNull LocationResult locationResult) {
-                for (Location location : locationResult.getLocations()) {
-                    // Update camera if needed
-                }
+                // Not strictly needed for geofencing, as Google Play Services handles it
             }
         };
     }
@@ -145,10 +154,26 @@ public class MapFragment extends Fragment {
     private void saveLocation(String name, double lat, double lng) {
         executor.execute(() -> {
             LocationEntity location = new LocationEntity(name, lat, lng);
-            AppDatabase.getInstance(requireContext()).locationDao().insert(location);
+            long id = AppDatabase.getInstance(requireContext()).locationDao().insert(location);
+            // After saving to DB, add Geofence
+            addGeofence(String.valueOf(id), lat, lng);
+            
             requireActivity().runOnUiThread(() -> 
-                Toast.makeText(getContext(), "Saved: " + name, Toast.LENGTH_SHORT).show());
+                Toast.makeText(getContext(), "Saved and Geofence added: " + name, Toast.LENGTH_SHORT).show());
         });
+    }
+
+    private void addGeofence(String id, double lat, double lng) {
+        if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        Geofence geofence = geofenceHelper.getGeofence(id, lat, lng, GEOFENCE_RADIUS, 
+                Geofence.GEOFENCE_TRANSITION_ENTER | Geofence.GEOFENCE_TRANSITION_DWELL | Geofence.GEOFENCE_TRANSITION_EXIT);
+        
+        geofencingClient.addGeofences(geofenceHelper.getGeofencingRequest(geofence), geofenceHelper.getPendingIntent())
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "Geofence Added"))
+                .addOnFailureListener(e -> Log.e(TAG, "onFailure: " + geofenceHelper.getErrorString(e)));
     }
 
     private void startLocationUpdates() {
@@ -156,6 +181,14 @@ public class MapFragment extends Fragment {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
             return;
         }
+        
+        // Background location permission for Android 10+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, 2);
+            }
+        }
+
         LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000).build();
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
         

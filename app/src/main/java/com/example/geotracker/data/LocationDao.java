@@ -11,7 +11,7 @@ import java.util.List;
 @Dao
 public interface LocationDao {
     @Insert
-    void insert(LocationEntity location);
+    long insert(LocationEntity location);
 
     @Delete
     void delete(LocationEntity location);
@@ -21,4 +21,7 @@ public interface LocationDao {
 
     @Query("SELECT * FROM locations")
     List<LocationEntity> getAllLocationsSync();
+
+    @Query("SELECT * FROM locations WHERE id = :id")
+    LocationEntity getLocationById(int id);
 }

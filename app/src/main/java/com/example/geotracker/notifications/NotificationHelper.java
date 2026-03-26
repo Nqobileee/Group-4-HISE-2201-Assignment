@@ -2,10 +2,13 @@ package com.example.geotracker.notifications;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.Intent;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
+import com.example.geotracker.MainActivity;
 import com.example.geotracker.R;
 
 public class NotificationHelper extends ContextWrapper {
@@ -36,11 +39,16 @@ public class NotificationHelper extends ContextWrapper {
     }
 
     public void sendNotification(String title, String body) {
+        Intent intent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 2607, intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0));
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pendingIntent)
                 .setAutoCancel(true);
 
         getManager().notify(1, builder.build());
